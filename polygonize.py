@@ -20,8 +20,18 @@ def quadraticPatch(x0, y0, x1, y1, x2, y2, subdivisions=10):
 		polyline.append((x, y))
 	return polyline
 
+def cubicPatch(x0, y0, x1, y1, x2, y2, x3, y3, subdivisions=10):
+	subdivisions += 1
+	polyline = list()
+	for i in range(1, subdivisions):
+		t, u = float(i) / subdivisions, float(subdivisions-i) / subdivisions
+		x = u*(u**2 * x0 + 3*t*(u*x1 + t*x2)) + t**3*x3
+		y = u*(u**2 * y0 + 3*t*(u*y1 + t*y2)) + t**3*y3
+		polyline.append((x, y))
+	return polyline
+
 # Supported commands
-commands = 'mMlLqQtThHvVzZ' # that means, CARSDEFGJ are unsupported (in both variants)
+commands = 'mMlLqQtThHvVzZcC' # that means, CARSDEFGJ are unsupported (in both variants)
 
 pat_command = re.compile("([{}])([0-9-\.,\s]*)".format(commands))
 pat_float = re.compile("[-+]?[0-9]*\.?[0-9]+")
@@ -35,7 +45,8 @@ def readsvg(filename):
 		polygon = list()
 		lastpoint = (0, 0)
 		for cmd, argstring in re.findall(pat_command, data):
-			if cmd in 'mlqtz':
+			if cmd in 'mlqtzc':
+				# convert relative to absolute coordinates
 				args = [float(s) + lastpoint[i] for s, i in zip(re.findall(pat_float, argstring), cycle((0,1)))]
 				cmd = cmd.upper()
 			else:
@@ -53,7 +64,7 @@ def readsvg(filename):
 				cmd = 'Q'
 			if cmd == 'Q' and len(args) == 2:
 				cmd = 'L'
-			if cmd in 'MLQhHvV':
+			if cmd in 'MLQhHvVcC':
 				if cmd in 'ML':
 					for x, y in ntuples(args, 2):
 						lastpoint = (x, y)
@@ -73,15 +84,21 @@ def readsvg(filename):
 					for x1, y1, x2, y2 in ntuples(args, 4):
 						polygon.extend(quadraticPatch(lastpoint[0], lastpoint[1], x1, y1, x2, y2))
 						lastpoint = (x2, y2)
+				elif cmd == 'C':
+					for x1, y1, x2, y2, x3, y3  in ntuples(args, 6):
+						polygon.extend(cubicPatch(lastpoint[0], lastpoint[1], x1, y1, x2, y2, x3, y3))
+						lastpoint = (x3, y3)
 				polygon.append(lastpoint)
 			elif cmd == 'Z':
 				polygons.append(polygon)
 				polygon = list()
 		if polygon:
-			polys.append(polygon)
-	return MultiPolygon([Polygon(polygon) for polygon in polygons])
+			polygons.append(polygon)
+			print polygons
+	shapelypolys = [Polygon(polygon) for polygon in polygons if (len(polygon)>2)]
+	return MultiPolygon(shapelypolys)
 	
 	#path.setAttribute("d", "M " + " Z\nM ".join(" L ".join("{:.4f}, {:.4f}".format(x, y) for x, y in poly) for poly in polys))
 	#with open("polygonized.svg", "w+") as f:
-	#	f.write(doc.toprettyxml())
+	#    f.write(doc.toprettyxml())
 	
